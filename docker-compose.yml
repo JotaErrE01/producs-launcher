@@ -1,0 +1,60 @@
+services: 
+  nats-service:
+    image: nats:latest
+    container_name: nats-service
+    ports:
+      - "8222:8222"
+
+  client-gateway:
+    env_file: ./client-gateway/.env
+    build: ./client-gateway
+    container_name: client-gateway
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client-gateway/src:/usr/src/app/src
+    environment:
+      - NATS_SERVERS=nats-service:4222
+    depends_on:
+      - nats-service
+      - product-service
+      - order-service
+    command: "pnpm start:dev"
+
+
+  product-service:
+    build: ./products-ms
+    container_name: product-service
+    env_file: ./products-ms/.env
+    environment:
+      - NATS_SERVERS=nats-service:4222
+      - DATABASE_URL=file:/usr/src/app/prisma/dev.db
+    depends_on:
+      - nats-service
+    command: "pnpm start:dev"
+
+  order-service:
+    build: ./orders-ms
+    container_name: order-service
+    env_file: ./orders-ms/.env
+    environment:
+      - NATS_SERVERS=nats-service:4222
+      - DATABASE_URL=postgres://postgres:postgres@orders-db:5432/orders_db
+    depends_on:
+      - nats-service
+      - product-service
+      - orders-db
+    command: "pnpm start:dev"
+
+
+  orders-db:
+    container_name: orders-db
+    image: postgres:15.3
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: orders_db
+    ports:
+      - '5432:5432'
+    volumes:
+      - ./orders-ms/orders_db_data:/var/lib/postgresql/data
